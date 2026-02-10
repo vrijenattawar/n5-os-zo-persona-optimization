@@ -32,6 +32,8 @@ python3 scripts/bootloader.py --scan
 python3 scripts/bootloader.py --apply
 ```
 
+Note: `python3 scripts/bootloader.py` requires either `--scan` or `--apply`. `--apply` now submits the manifest via `/zo/ask`.
+
 ---
 
 ## What’s inside
