@@ -2,8 +2,8 @@
 """Bootloader for Zo persona optimization.
 
 Flow:
-1) --scan (default) writes INSTALL_PROPOSAL.md so you can personalize + approve.
-2) --apply packages the manifest and asks Zo (via /zo/ask) to create personas and rules.
+1) --scan writes INSTALL_PROPOSAL.md so you can personalize + approve.
+2) --apply installs the personas/rules via /zo/ask.
 """
 import argparse
 import json
@@ -22,6 +22,7 @@ ROUTING_TEMPLATE_PATH = TEMPLATES_DIR / "routing-contract.md"
 PERSONALIZE_PATH = TEMPLATES_DIR / "personalize.md"
 WORKSPACE_ROOT = Path("/home/workspace")
 INSTALL_PROPOSAL_PATH = REPO_ROOT / "INSTALL_PROPOSAL.md"
+INSTALL_RECEIPT_PATH = REPO_ROOT / "INSTALL_RECEIPT.json"
 ZO_ASK_URL = "https://api.zo.computer/zo/ask"
 
 HARD_SWITCH_RULES = [
@@ -30,39 +31,43 @@ HARD_SWITCH_RULES = [
         "name": "builder switch",
         "condition": "When the user asks to build, create, implement, or deploy systems",
         "instruction_template": "Call set_active_persona('<builder_id>') before substantive work begins.",
+        "target_role": "builder",
     },
     {
         "key": "debugger",
         "name": "debugger switch",
         "condition": "When the user asks to debug, troubleshoot, test, or verify",
         "instruction_template": "Call set_active_persona('<debugger_id>') before substantive work begins.",
+        "target_role": "debugger",
     },
     {
         "key": "strategist",
         "name": "strategist switch",
         "condition": "When the user needs decisions, tradeoffs, or strategy",
         "instruction_template": "Call set_active_persona('<strategist_id>') before substantive work begins.",
+        "target_role": "strategist",
     },
     {
         "key": "writer",
         "name": "writer switch",
         "condition": "When the user needs external-facing writing or polished drafts",
         "instruction_template": "Call set_active_persona('<writer_id>') before substantive work begins.",
+        "target_role": "writer",
     },
 ]
 
-METHODOLOGY_RULES = [
+METHODOLOGY_RULES_CONFIG = [
     {
         "key": "researcher",
         "name": "researcher methodology",
         "condition": "When the user asks for multi-source research",
-        "instruction": "Without changing personas, load and apply the Researcher methodology described in templates/personas/researcher.md (method steps + standards, trimmed frontmatter).",
+        "template": "researcher.md",
     },
     {
         "key": "teacher",
         "name": "teacher methodology",
         "condition": "When the user asks for deep explanation or learning support",
-        "instruction": "Without changing personas, load and apply the Teacher methodology described in templates/personas/teacher.md (method steps + standards, trimmed frontmatter).",
+        "template": "teacher.md",
     },
 ]
 
@@ -173,19 +178,30 @@ def build_persona_manifest(persona_names: Dict[str, str], ledger_path: str) -> L
     return manifests
 
 
-def build_rule_manifest(rule_prefix: str) -> List[Dict[str, str]]:
-    rules: List[Dict[str, str]] = []
+def load_methodology_text(template_name: str) -> str:
+    template_path = PERSONA_TEMPLATES_DIR / template_name
+    return strip_frontmatter(load_text(template_path))
+
+
+def build_rule_manifest(rule_prefix: str, persona_names: Dict[str, str], ledger_path: str) -> List[Dict[str, Any]]:
+    rules: List[Dict[str, Any]] = []
+    placeholder_map = {f"{role}_name": name for role, name in persona_names.items()}
+    ledger_block = learning_block(ledger_path)
     for rule in HARD_SWITCH_RULES:
         rules.append({
             "name": f"{rule_prefix}: {rule['name']}",
             "condition": rule["condition"],
-            "instruction": rule["instruction_template"],
+            "instruction": apply_placeholders(rule["instruction_template"], placeholder_map),
+            "target_role": rule["target_role"],
         })
-    for rule in METHODOLOGY_RULES:
+    for rule in METHODOLOGY_RULES_CONFIG:
+        instruction = apply_placeholders(load_methodology_text(rule["template"]), placeholder_map)
+        if "{{LEARNING_LEDGER_BLOCK}}" in instruction:
+            instruction = instruction.replace("{{LEARNING_LEDGER_BLOCK}}", ledger_block)
         rules.append({
             "name": f"{rule_prefix}: {rule['name']}",
             "condition": rule["condition"],
-            "instruction": rule["instruction"],
+            "instruction": instruction,
         })
     return rules
 
@@ -215,24 +231,29 @@ def extract_json_summary(output: str) -> Dict[str, Any]:
         return {"error": "Failed to parse JSON", "output": output[start:]}
 
 
-def build_install_prompt(personas: List[Dict[str, Any]], rules: List[Dict[str, str]]) -> str:
+def build_install_prompt(personas: List[Dict[str, Any]], rules: List[Dict[str, Any]]) -> str:
     persona_block = json.dumps([{"name": p["name"], "prompt": p["prompt"]} for p in personas], indent=2)
-    rule_block = json.dumps(rules, indent=2)
+    rule_block = json.dumps([{k: v for k, v in r.items() if k != "target_role"} for r in rules], indent=2)
+    step_text = (
+        "Step 1: For each persona entry, immediately call `create_persona` with the `name` and `prompt`, then record the returned ID under that persona's role.\n"
+        "Step 2: After all personas exist, iterate the rule entries. For rules with `target_role`, replace tokens like `<builder_id>` with the ID assigned to that role.\n"
+        "Step 3: Call `create_rule` with the finalized `name`, `condition`, and `instruction`.\n"
+        "Step 4: Once every rule is created, reply with JSON listing every persona and rule name + id.\n"
+    )
     return (
-        "You are Zo. Run the persona installation manifest below by calling the relevant tools.\n"
-        "For each persona entry, immediately call the `create_persona` tool with the `name` and `prompt` values.\n"
-        "For each rule entry, call the `create_rule` tool with the `name`, `condition`, and `instruction`.\n"
-        "Do not invent additional personas or rules. After each tool call, note the returned ID.\n"
-        "Reply with a JSON object describing success, e.g. `{\n  \"success\": true,\n  \"personas\": [{\"name\": \"Builder\", \"id\": \"...\"}],\n  \"rules\": [{\"name\": \"persona: builder switch\", \"id\": \"...\"}]\n}`.\n"
-        "If any tool call fails, report `success: false` and include an `error_message`.\n"
-        "Do not switch personas while installing.\n\n"
+        "You are Zo. Execute the persona install manifest below.\n"
+        "- Create personas first, mapping each role to the returned ID.\n"
+        "- Use those IDs when composing rules that reference specialized personas.\n"
+        "- Do not duplicate installs if the same names already exist.\n"
+        "- Do not switch personas during install.\n\n"
+        f"{step_text}\n"
         f"Personas:\n{persona_block}\n\n"
         f"Rules:\n{rule_block}\n"
-        "Replace tokens like <builder_id> with the ID returned from the create_persona tool before calling create_rule."
+        "Return JSON, for example: {\n  \"success\": true,\n  \"personas\": [{\"name\": \"Builder\", \"id\": \"abc\"}],\n  \"rules\": [{\"name\": \"persona: builder switch\", \"id\": \"rule-123\"}]\n}"
     )
 
 
-def execute_install_manifest(personas: List[Dict[str, Any]], rules: List[Dict[str, str]]) -> Dict[str, Any]:
+def execute_install_manifest(personas: List[Dict[str, Any]], rules: List[Dict[str, Any]]) -> Dict[str, Any]:
     prompt = build_install_prompt(personas, rules)
     response = send_zo_prompt(prompt)
     summary = extract_json_summary(response.get("output", ""))
@@ -240,7 +261,17 @@ def execute_install_manifest(personas: List[Dict[str, Any]], rules: List[Dict[st
     return summary
 
 
-def apply_install() -> None:
+def write_install_receipt(summary: Dict[str, Any], mapping: Dict[str, str]) -> None:
+    receipt = {
+        "timestamp": datetime.now().isoformat(),
+        "mapping": mapping,
+        "summary": summary,
+    }
+    timestamped(f"Writing install receipt to {INSTALL_RECEIPT_PATH}")
+    INSTALL_RECEIPT_PATH.write_text(json.dumps(receipt, indent=2), encoding="utf-8")
+
+
+def apply_install(dry_run: bool = False) -> None:
     if not INSTALL_PROPOSAL_PATH.exists():
         raise RuntimeError("INSTALL_PROPOSAL.md not found. Run --scan first.")
     personalize = parse_personalize()
@@ -291,12 +322,18 @@ provenance: bootloader-install
             encoding="utf-8",
         )
     persona_manifest = build_persona_manifest(persona_names, str(ledger_path))
-    rules = build_rule_manifest(personalize.get("rule_prefix", "persona"))
+    rules = build_rule_manifest(personalize.get("rule_prefix", "persona"), persona_names, str(ledger_path))
+    timestamped(f"Prepared {len(persona_manifest)} personas and {len(rules)} rules")
+    if dry_run:
+        timestamped("Dry run enabled; skipping /zo/ask call")
+        print(json.dumps({"personas": persona_manifest, "rules": rules, "mapping": mapping}, indent=2))
+        return
     summary = execute_install_manifest(persona_manifest, rules)
     if not summary.get("success"):
         raise RuntimeError(f"Install failed: {summary.get('error_message', summary)}")
     timestamped("Install manifest submitted. Review Zo's response for created IDs.")
     timestamped(json.dumps(summary, indent=2))
+    write_install_receipt(summary, mapping)
 
 
 def write_install_proposal(mapping: Dict[str, str], persona_names: Dict[str, str]) -> None:
@@ -344,6 +381,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Zo Persona Optimization bootloader")
     parser.add_argument("--scan", action="store_true", help="Scan the workspace and write INSTALL_PROPOSAL.md")
     parser.add_argument("--apply", action="store_true", help="Apply the install manifest via Zo's /zo/ask endpoint")
+    parser.add_argument("--dry-run", action="store_true", help="Simulate apply without calling /zo/ask")
     return parser.parse_args()
 
 
@@ -370,7 +408,7 @@ def main() -> None:
             f"Wrote {INSTALL_PROPOSAL_PATH}. Review it, update templates/personalize.md, set approve_install: true, then run --apply."
         )
         return
-    apply_install()
+    apply_install(dry_run=args.dry_run)
 
 
 if __name__ == "__main__":
