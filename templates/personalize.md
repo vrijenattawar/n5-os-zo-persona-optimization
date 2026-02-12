@@ -1,15 +1,15 @@
 ---
 created: 2026-02-10
-last_edited: 2026-02-10
-version: 1.0
-provenance: con_zreDLAsCmbNBlcd1
+last_edited: 2026-02-12
+version: 2.0
+provenance: con_mZ74iGY4PLUrktMV
 ---
 # Personalization
 
-Fill these out after running `--scan`. The installer will not apply changes until `approve_install: true`.
+Fill in the values below before running the bootloader. These control persona names,
+file paths, and the rule prefix used to avoid collisions with other rules.
 
-## Required (names)
-
+## Persona Names
 operator_name: "Operator"
 builder_name: "Builder"
 debugger_name: "Debugger"
@@ -17,31 +17,22 @@ strategist_name: "Strategist"
 writer_name: "Writer"
 researcher_name: "Researcher"
 teacher_name: "Teacher"
+architect_name: "Architect"
+librarian_name: "Librarian"
 
-## Required (rules)
-
+## Rule Configuration
 rule_prefix: "persona"
 
-## Required (structure)
-
+## Paths (scanned by --scan, override here if needed)
 documents_system_path: "/home/workspace/Documents/System"
-learning_ledger_path: "/home/workspace/Documents/System/persona-learnings.md"
+learning_ledger_path: ""
 
-## Optional
-
-voice_notes: ""
-custom_domain_analogies: ""
-
-## Approval (must be true to install)
-
+## Approval Gate
 approve_install: false
 
----
-
-## Socratic clarification (answer before install)
-
+## Socratic Questions (answer these before setting approve_install: true)
 1. Which personas are you installing, and why those?
 2. Where will the routing contract and learning ledger live?
-3. What rule prefix should be used to avoid collisions?
-4. What would break if these rules mis‑route a request?
+3. What rule prefix avoids collisions with your existing rules?
+4. What would break if these rules mis-route a request?
 5. How will you verify the personas are switching correctly?

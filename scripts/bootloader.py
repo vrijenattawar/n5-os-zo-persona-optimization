@@ -29,30 +29,37 @@ HARD_SWITCH_RULES = [
     {
         "key": "builder",
         "name": "builder switch",
-        "condition": "When the user asks to build, create, implement, or deploy systems",
-        "instruction_template": "Call set_active_persona('<builder_id>') before substantive work begins.",
+        "condition": "When the user asks to build, implement, deploy, automate, or write new systems/scripts/code",
+        "instruction_template": "Call set_active_persona('<builder_id>') before substantive work begins. NOT triggered for markdown-only docs, running existing scripts, simple file ops, or quick config tweaks that don't require new coding.",
         "target_role": "builder",
     },
     {
         "key": "debugger",
         "name": "debugger switch",
-        "condition": "When the user asks to debug, troubleshoot, test, or verify",
-        "instruction_template": "Call set_active_persona('<debugger_id>') before substantive work begins.",
+        "condition": "When the user asks to debug, troubleshoot, test, verify behavior, resolve errors, or repeatedly fix a failing flow",
+        "instruction_template": "Call set_active_persona('<debugger_id>') before substantive work begins. NOT triggered for single-line typos, cosmetic edits, or inline build errors that {{builder_name}} can handle without switching.",
         "target_role": "debugger",
     },
     {
         "key": "strategist",
         "name": "strategist switch",
-        "condition": "When the user needs decisions, tradeoffs, or strategy",
-        "instruction_template": "Call set_active_persona('<strategist_id>') before substantive work begins.",
+        "condition": "When the user is weighing consequential decisions, needs tradeoff analysis, multi-path options, or structured strategy",
+        "instruction_template": "Call set_active_persona('<strategist_id>') before substantive work begins. NOT triggered for simple preferences, obvious yes/no questions, or implementation choices within an already-decided direction.",
         "target_role": "strategist",
     },
     {
         "key": "writer",
         "name": "writer switch",
-        "condition": "When the user needs external-facing writing or polished drafts",
-        "instruction_template": "Call set_active_persona('<writer_id>') before substantive work begins.",
+        "condition": "When the user needs external-facing communication longer than two sentences, polished drafts, or public messaging",
+        "instruction_template": "Call set_active_persona('<writer_id>') before substantive work begins. NOT triggered for internal notes, code comments, short confirmations, or private chat responses.",
         "target_role": "writer",
+    },
+    {
+        "key": "architect",
+        "name": "architect switch",
+        "condition": "When the request is a major build/refactor (>50 lines, multi-file, schema change, new system, persona/prompt design) requiring a plan",
+        "instruction_template": "Call set_active_persona('<architect_id>') before planning starts. NOT triggered for tiny edits or single-file tweaks under 50 lines.",
+        "target_role": "architect",
     },
 ]
 
@@ -70,6 +77,12 @@ METHODOLOGY_RULES_CONFIG = [
         "template": "teacher.md",
     },
 ]
+
+RETURN_TO_OPERATOR_RULE = {
+    "name": "persona: return to operator",
+    "condition": "After completing work as Builder, Debugger, Strategist, Writer, Architect, Librarian, or any other specialist persona",
+    "instruction": "Call set_active_persona('<operator_id>') with a short summary before continuing. This keeps {{operator_name}} in control and tracks progress.",
+}
 
 
 def timestamped(message: str) -> None:
@@ -161,6 +174,8 @@ def build_persona_manifest(persona_names: Dict[str, str], ledger_path: str) -> L
         "writer": PERSONA_TEMPLATES_DIR / "writer.md",
         "researcher": PERSONA_TEMPLATES_DIR / "researcher.md",
         "teacher": PERSONA_TEMPLATES_DIR / "teacher.md",
+        "architect": PERSONA_TEMPLATES_DIR / "architect.md",
+        "librarian": PERSONA_TEMPLATES_DIR / "librarian.md",
     }.items():
         raw_prompt = strip_frontmatter(load_text(template_path))
         placeholders = {f"{r}_name": persona_names[r] for r in persona_names}
@@ -203,6 +218,11 @@ def build_rule_manifest(rule_prefix: str, persona_names: Dict[str, str], ledger_
             "condition": rule["condition"],
             "instruction": instruction,
         })
+    rules.append({
+        "name": f"{rule_prefix}: {RETURN_TO_OPERATOR_RULE['name']}",
+        "condition": RETURN_TO_OPERATOR_RULE["condition"],
+        "instruction": apply_placeholders(RETURN_TO_OPERATOR_RULE["instruction"], placeholder_map),
+    })
     return rules
 
 
@@ -291,6 +311,8 @@ def apply_install(dry_run: bool = False) -> None:
         "writer": personalize.get("writer_name", "Writer"),
         "researcher": personalize.get("researcher_name", "Researcher"),
         "teacher": personalize.get("teacher_name", "Teacher"),
+        "architect": personalize.get("architect_name", "Architect"),
+        "librarian": personalize.get("librarian_name", "Librarian"),
     }
     docs_system = Path(mapping["documents_system_path"])
     docs_system.mkdir(parents=True, exist_ok=True)
@@ -302,6 +324,8 @@ def apply_install(dry_run: bool = False) -> None:
         "writer_name": persona_names["writer"],
         "researcher_name": persona_names["researcher"],
         "teacher_name": persona_names["teacher"],
+        "architect_name": persona_names["architect"],
+        "librarian_name": persona_names["librarian"],
     })
     (docs_system / "persona-routing-contract.md").write_text(routing, encoding="utf-8")
     ledger_path = Path(mapping["learning_ledger_path"])
@@ -360,8 +384,8 @@ def write_install_proposal(mapping: Dict[str, str], persona_names: Dict[str, str
         "## What Will Be Installed",
         "- Routing contract file",
         "- Learning ledger file (if not exists)",
-        "- 7 persona prompts (in Zo settings)",
-        "- 6 rules (4 hard-switch + 2 methodology)",
+        "- 9 persona prompts (in Zo settings)",
+        "- 7 rules (5 hard-switch + 2 methodology + return-to-operator)",
         "",
         "## How ad-hoc changes are applied across the board",
         "- Persona names and rule prefixes are injected into templates before export",
@@ -402,6 +426,8 @@ def main() -> None:
             "writer": personalize.get("writer_name", "Writer"),
             "researcher": personalize.get("researcher_name", "Researcher"),
             "teacher": personalize.get("teacher_name", "Teacher"),
+            "architect": personalize.get("architect_name", "Architect"),
+            "librarian": personalize.get("librarian_name", "Librarian"),
         }
         write_install_proposal(mapping, persona_names)
         print(
