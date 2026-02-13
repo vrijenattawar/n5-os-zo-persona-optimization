@@ -79,9 +79,10 @@ METHODOLOGY_RULES_CONFIG = [
 ]
 
 RETURN_TO_OPERATOR_RULE = {
-    "name": "persona: return to operator",
+    "name": "return to operator",
     "condition": "After completing work as Builder, Debugger, Strategist, Writer, Architect, Librarian, or any other specialist persona",
     "instruction": "Call set_active_persona('<operator_id>') with a short summary before continuing. This keeps {{operator_name}} in control and tracks progress.",
+    "target_role": "operator",
 }
 
 
@@ -222,6 +223,7 @@ def build_rule_manifest(rule_prefix: str, persona_names: Dict[str, str], ledger_
         "name": f"{rule_prefix}: {RETURN_TO_OPERATOR_RULE['name']}",
         "condition": RETURN_TO_OPERATOR_RULE["condition"],
         "instruction": apply_placeholders(RETURN_TO_OPERATOR_RULE["instruction"], placeholder_map),
+        "target_role": RETURN_TO_OPERATOR_RULE["target_role"],
     })
     return rules
 
@@ -303,6 +305,9 @@ def apply_install(dry_run: bool = False) -> None:
         "documents_system_path": personalize.get("documents_system_path", mapping["documents_system_path"]),
         "learning_ledger_path": personalize.get("learning_ledger_path", mapping["learning_ledger_path"]),
     })
+    # Treat empty learning_ledger_path as unset; fall back to proposed default
+    if not mapping["learning_ledger_path"]:
+        mapping["learning_ledger_path"] = propose_mapping(candidates)["learning_ledger_path"]
     persona_names = {
         "operator": personalize.get("operator_name", "Operator"),
         "builder": personalize.get("builder_name", "Builder"),
@@ -385,7 +390,7 @@ def write_install_proposal(mapping: Dict[str, str], persona_names: Dict[str, str
         "- Routing contract file",
         "- Learning ledger file (if not exists)",
         "- 9 persona prompts (in Zo settings)",
-        "- 7 rules (5 hard-switch + 2 methodology + return-to-operator)",
+        "- 8 rules (5 hard-switch + 2 methodology + return-to-operator)",
         "",
         "## How ad-hoc changes are applied across the board",
         "- Persona names and rule prefixes are injected into templates before export",

@@ -53,8 +53,9 @@ These personas provide genuine **cognitive stance shifts** that {{operator_name}
 | **{{debugger_name}}** | "Debug", "troubleshoot", "fix", errors, 3+ failed attempts, "verify", "test" | Simple typo fixes, one-line corrections, errors during a build that {{builder_name}} handles inline |
 | **{{strategist_name}}** | "Help me think through", "what are my options", consequential decisions, multi-path tradeoffs | Simple preferences ("name it X or Y?"), obvious yes/no, implementation choices within decided direction |
 | **{{writer_name}}** | External-facing text >2 sentences, emails, posts, proposals, outreach | Internal notes, code comments, chat responses, short confirmations |
+| **{{architect_name}}** | Major build/refactor (>50 lines, multi-file, schema change, new system, persona/prompt design) requiring a plan | Tiny edits, single-file tweaks under 50 lines |
 
-**Design rationale:** These personas provide a genuine cognitive stance shift (engineering discipline, skeptical verifier, multi-path thinker, voice-conscious communicator) that {{operator_name}} cannot replicate.
+**Design rationale:** These personas provide a genuine cognitive stance shift (engineering discipline, skeptical verifier, multi-path thinker, voice-conscious communicator, systems thinker with plan-before-build discipline) that {{operator_name}} cannot replicate.
 
 ### 3.2 Methodology Injection (Load and Apply)
 
@@ -71,7 +72,7 @@ These personas have useful frameworks, but {{operator_name}}'s stance is suffici
 
 | Persona | When to Invoke | Gate |
 |---------|---------------|------|
-| **{{architect_name}}** | Major builds (>50 lines, multi-file, schema changes, new systems) | MANDATORY before {{builder_name}} for major work |
+| **{{architect_name}}** | Major builds (>50 lines, multi-file, schema changes, new systems) | MANDATORY before {{builder_name}} for major work (also enforced via hard-switch rule) |
 | **{{librarian_name}}** | State sync, cleanup, filing, coherence checks | Invoked BY {{operator_name}} at semantic breakpoints |
 
 ---
